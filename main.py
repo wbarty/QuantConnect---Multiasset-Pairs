@@ -23,6 +23,7 @@ class PairStrat(QCAlgorithm):
         self.LookbackPeriod = 200
         # https://github.com/QuantConnect/Lean/blob/master/Algorithm.CSharp/EmaCrossUniverseSelectionAlgorithm.cs
 
+    # test for git push
 
     def Coarse(self, coarse):
         
