@@ -13,7 +13,7 @@ class PairStrat(QCAlgorithm):
 
     def Initialize(self):
         # Initialise Algo date and funding for backtesting
-        self.SetStartDate(2018, 1, 1)
+        self.SetStartDate(2018, 5, 1)
         self.SetEndDate(2018, 10, 10)
         self.SetCash(100000)
         
@@ -22,7 +22,9 @@ class PairStrat(QCAlgorithm):
         # Algorithm component init
         self.LookbackPeriod = 200
         # https://github.com/QuantConnect/Lean/blob/master/Algorithm.CSharp/EmaCrossUniverseSelectionAlgorithm.cs
-
+        self.MaxTradedPairs = 10
+        self.TradedPairs = []
+        self.PairsToRemove = []
     # test for git push
 
     def Coarse(self, coarse):
@@ -84,16 +86,17 @@ class PairStrat(QCAlgorithm):
         return pairs
 
     def Fine(self, fine):
-
+        # Cointegration Test - Engle Granger
+        # Testing on asset prices not returns
         def cointTest(pairs, siglevel = 0.05):
-            for pair in fine:
+            for pair in pairs:
                 h0 = self.History(pair[0], self.LookbackPeriod, Resolution.Daily)
                 h1 = self.History(pair[1], self.LookbackPeriod, Resolution.Daily)
-                r0 = h0.unstack(level = 1).close.transpose().pct_change().dropna()
-                r1 = h1.unstack(level = 1).close.transpose().pct_change().dropna()
+                r0 = h0.unstack(level = 1).close.transpose().dropna()
+                r1 = h1.unstack(level = 1).close.transpose().dropna()
 
                 return pd.Series([coint(r0, r1)[1] < siglevel for columns, values \
-                                    in fine], index = fine)
+                                    in pairs], index = pairs)
     
             # for i, j in fine:
             #     ih = self.History(self.Symbol(str(i)), 1000, Resolution.Daily)
@@ -103,46 +106,105 @@ class PairStrat(QCAlgorithm):
 
             #     return pd.Series([coint(ir, ij)[1] < siglevel for columns, values \
             #                         in fine], index = fine)
-        
+            
+        # Perform the coint test on the pairs returning a pandas series 
         cointTested = cointTest(fine)
         coPairs = []
+        
+        # Iterate over series, check if the pair is cointegrated (True) and append to coPairs
         for symbols, value in cointTested.iteritems():
-            if valeue == True:
+            if value == True:
                 coPairs.append(symbols)
 
-        pairs = coPairs
-        return pairs
-
+        pairs = list(coPairs.index)
+        return pairs    
         
-    def OnSecuritiesChhanged(self, changes):
-        self.changes = changes
-        self.Log(f"OnSecuritiesChanged({self.UtcTime}):: {changes}")
-        for security in changes.RemoveSecurities:
-            self.Liquidate(security.Symbol)
-        for security in changes.AddedSecurities:
-            self.SetHoldings(security.Symbol, 0.1)
+    def OnSecuritiesChanged(self, changes):
+        # selected symbols will be found in Log
+        self.Log(f'New Securities Added: {[security.Symbol.Value for security in changes.AddedSecurities]}')
+        self.Log(f'Securities Removed{[security.Symbol.Value for security in changes.RemovedSecurities]}')
+
+    # # Update universe of tradeable securities
+    # def OnSecuritiesChhanged(self, changes):
+    #     self.changes = changes
+    #     self.Log(f"OnSecuritiesChanged({self.UtcTime}):: {changes}")
+    #     for security in changes.RemoveSecurities:
+    #         self.Liquidate(security.Symbol)
+    #     for security in changes.AddedSecurities:
+    #         self.SetHoldings(security.Symbol, 0.1)
     
     
-    def OnData(self, pairs):
-            for pair in self.pairs:
-                # Calculate the spread of two price series.
-                history0 = self.History(self.pairs[0], self.LookbackPeriod, Resolution.Daily)
-                history1 = self.History(self.pairs[1], self.LookbackPeriod, Resolution.Daily)
-                spread = np.array(history0) - np.array(history1)
-                mean = np.mean(spread)
-                std = np.std(spread)
-                ratio = self.Portfolio[pair[0]].Price / self.Portfolio[pair[1]].Price
+    # Create indicators for tradeable securities and excetute trades 
+    # def OnData(self, data):
+    #     for pair in self.pairs:
+    #         # Calculate the spread of two price series.
+    #         history0 = self.History(pair[0], self.LookbackPeriod, Resolution.Daily)
+    #         history1 = self.History(pair[1], self.LookbackPeriod, Resolution.Daily)
+    #         spread = np.array(history0) - np.array(history1)
+    #         mean = np.mean(spread)
+    #         std = np.std(spread)
+    #         ratio = self.Portfolio[pair[0]].Price / self.Portfolio[pair[1]].Price
+
+    #         # Long-short position is opened when pair prices have diverged by two standard deviations.
+    #         weight = 1 / self.MaxTradedPairs
+    #         if spread[-1] > mean + 2*std:
+    #             if not self.Portfolio[pair[0]].Invested and not self.Portfolio[pair[1]].Invested:
+    #                 if len(self.TradedPairs) < self.MaxTradedPairs:
+    #                     self.SetHoldings(pair[0], -weight)
+    #                     self.SetHoldings(pair[1], weight)
+                        
+    #                     if pair not in self.TradedPairs:
+    #                         self.TradedPairs.append(pair)
+                            
+    #             elif self.Portfolio[pair[0]].Invested and self.Portfolio[pair[1]].Invested:
+    #                 self.SetHoldings(pair[0], -weight)
+    #                 self.SetHoldings(pair[1], weight)
+            
+    #         elif spread[-1] < mean - 2*std:
+    #             if not self.Portfolio[pair[0]].Invested and not self.Portfolio[pair[1]].Invested:
+    #                 if len(self.TradedPairs) < self.MaxTradedPairs:
+    #                     self.SetHoldings(pair[0], weight)
+    #                     self.SetHoldings(pair[1], -weight)
+    
+    #                     if pair not in self.TradedPairs:
+    #                         self.TradedPairs.append(pair)
+                            
+    #             elif self.Portfolio[pair[0]].Invested and self.Portfolio[pair[1]].Invested:
+    #                 self.SetHoldings(pair[0], weight)
+    #                 self.SetHoldings(pair[1], -weight)
+
+    #         # The position is closed when prices revert back.
+    #         else:
+    #             if self.Portfolio[pair[0]].Invested and self.Portfolio[pair[1]].Invested:
+    #                 self.Liquidate(pair[0]) 
+    #                 self.Liquidate(pair[1])
+                    
+    #                 if pair in self.TradedPairs:
+    #                     self.PairsToRemove.append(pair)
+            
+    #         for pair in self.PairsToRemove:
+    #             self.TradedPairs.remove(pair)
+    #         self.PairsToRemove.clear()
+    def OnData(self, data):
+        for pair in data:
+            # Calculate the spread of two price series.
+            history0 = self.History([pair[0].Symbol], self.LookbackPeriod, Resolution.Daily)
+            history1 = self.History([pair[1].Symbol], self.LookbackPeriod, Resolution.Daily)
+            spread = np.array(history0) - np.array(history1)
+            mean = np.mean(spread)
+            std = np.std(spread)
+            ratio = self.Portfolio[pair[0]].Price / self.Portfolio[pair[1]].Price
 
             # Long-short position is opened when pair prices have diverged by two standard deviations.
-            weight = 1 / self.max_traded_pairs
+            weight = 1 / self.MaxTradedPairs
             if spread[-1] > mean + 2*std:
                 if not self.Portfolio[pair[0]].Invested and not self.Portfolio[pair[1]].Invested:
-                    if len(self.traded_pairs) < self.max_traded_pairs:
+                    if len(self.TradedPairs) < self.MaxTradedPairs:
                         self.SetHoldings(pair[0], -weight)
                         self.SetHoldings(pair[1], weight)
                         
-                        if pair not in self.traded_pairs:
-                            self.traded_pairs.append(pair)
+                        if pair not in self.TradedPairs:
+                            self.TradedPairs.append(pair)
                             
                 elif self.Portfolio[pair[0]].Invested and self.Portfolio[pair[1]].Invested:
                     self.SetHoldings(pair[0], -weight)
@@ -150,12 +212,12 @@ class PairStrat(QCAlgorithm):
             
             elif spread[-1] < mean - 2*std:
                 if not self.Portfolio[pair[0]].Invested and not self.Portfolio[pair[1]].Invested:
-                    if len(self.traded_pairs) < self.max_traded_pairs:
+                    if len(self.TradedPairs) < self.MaxTradedPairs:
                         self.SetHoldings(pair[0], weight)
                         self.SetHoldings(pair[1], -weight)
     
-                        if pair not in self.traded_pairs:
-                            self.traded_pairs.append(pair)
+                        if pair not in self.TradedPairs:
+                            self.TradedPairs.append(pair)
                             
                 elif self.Portfolio[pair[0]].Invested and self.Portfolio[pair[1]].Invested:
                     self.SetHoldings(pair[0], weight)
@@ -167,28 +229,27 @@ class PairStrat(QCAlgorithm):
                     self.Liquidate(pair[0]) 
                     self.Liquidate(pair[1])
                     
-                    if pair in self.traded_pairs:
-                        pairs_to_remove.append(pair)
+                    if pair in self.TradedPairs:
+                        self.PairsToRemove.append(pair)
             
-            for pair in pairs_to_remove:
-                self.traded_pairs.remove(pair)
-            pairs_to_remove.clear()
-            
-            # self.Log(len(self.traded_pairs))
+            for pair in self.PairsToRemove:
+                self.TradedPairs.remove(pair)
+            self.PairsToRemove.clear()
+            self.Log(len(self.traded_pairs))
                 
-    def Distance(self, price_a, price_b):
-        # Calculate the sum of squared deviations between two normalized price series.
-        norm_a = np.array(price_a) / price_a[0]
-        norm_b = np.array(price_b) / price_b[0]
-        return sum((norm_a - norm_b)**2)
+    # def Distance(self, price_a, price_b):
+    #     # Calculate the sum of squared deviations between two normalized price series.
+    #     norm_a = np.array(price_a) / price_a[0]
+    #     norm_b = np.array(price_b) / price_b[0]
+    #     return sum((norm_a - norm_b)**2)
         
-    def Selection(self):
-        if self.month == 6:
-            self.selection_flag = True
+    # def Selection(self):
+    #     if self.month == 6:
+    #         self.selection_flag = True
             
-        self.month += 1
-        if self.month > 12:
-            self.month = 1
+    #     self.month += 1
+    #     if self.month > 12:
+    #         self.month = 1
             
     def OnOrderEvent(self, orderEvent):
             order = self.Transactions.GetOrderById(orderEvent.OrderId)
@@ -199,4 +260,3 @@ class PairStrat(QCAlgorithm):
         #return 'trace stat:', coint_johansen(endog, -1, 1).lr1, 'crit val (90, 95, 99', coint_johansen(endog, -1, 1).cvt
         #return coint(returnsi, returnsj, trend='c', method='aeg', maxlag=None, \
                      #autolag='aic', return_results=True)
-    '''
