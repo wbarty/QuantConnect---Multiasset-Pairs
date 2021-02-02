@@ -83,7 +83,6 @@ class PairStrat(QCAlgorithm):
         pairs =  list(coarseSelection.index)
         return pairs
 
-'''
     def Fine(self, fine):
 
         def cointTest(pairs, siglevel = 0.05):
