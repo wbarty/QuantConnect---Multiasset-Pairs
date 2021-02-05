@@ -38,7 +38,7 @@ class PairStrat(QCAlgorithm):
             coerce_float=True)
         self.universe = data_df.index.tolist()
         return self.universe
-        context.Log("course size is: {}".format(universe.volume))
+        context.Log("coarse size is: {}".format(universe.volume))
         return self.universe.index.tolist()
         data = pd.DataFrame(self.universe)
 
@@ -90,8 +90,8 @@ class PairStrat(QCAlgorithm):
         # Testing on asset prices not returns
         def cointTest(pairs, siglevel = 0.05):
             for pair in pairs:
-                h0 = self.History(pair[0], self.LookbackPeriod, Resolution.Daily)
-                h1 = self.History(pair[1], self.LookbackPeriod, Resolution.Daily)
+                h0 = self.History(str(pair[0]).Symbol, self.LookbackPeriod, Resolution.Daily)
+                h1 = self.History(str(pair[1]).Symbol, self.LookbackPeriod, Resolution.Daily)
                 r0 = h0.unstack(level = 1).close.transpose().dropna()
                 r1 = h1.unstack(level = 1).close.transpose().dropna()
 
@@ -118,12 +118,11 @@ class PairStrat(QCAlgorithm):
 
         pairs = list(coPairs.index)
         return pairs    
-        
+        self.Log(f'Fine: {[security.Symbol.Value for security in pairs]}') 
     def OnSecuritiesChanged(self, changes):
         # selected symbols will be found in Log
         self.Log(f'New Securities Added: {[security.Symbol.Value for security in changes.AddedSecurities]}')
         self.Log(f'Securities Removed{[security.Symbol.Value for security in changes.RemovedSecurities]}')
-
     # # Update universe of tradeable securities
     # def OnSecuritiesChhanged(self, changes):
     #     self.changes = changes
@@ -188,8 +187,8 @@ class PairStrat(QCAlgorithm):
     def OnData(self, data):
         for pair in data:
             # Calculate the spread of two price series.
-            history0 = self.History([pair[0].Symbol], self.LookbackPeriod, Resolution.Daily)
-            history1 = self.History([pair[1].Symbol], self.LookbackPeriod, Resolution.Daily)
+            history0 = self.History([str(pair[0]).Symbol], self.LookbackPeriod, Resolution.Daily)
+            history1 = self.History([str(pair[1]).Symbol], self.LookbackPeriod, Resolution.Daily)
             spread = np.array(history0) - np.array(history1)
             mean = np.mean(spread)
             std = np.std(spread)
